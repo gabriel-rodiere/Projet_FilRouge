@@ -1,7 +1,7 @@
 semantic-kernel>=1.40
 openai>=1.60
 python-dotenv>=1.0
-mysql-connector-python>=9.0
+mysql-connector-python>=26.7.0
 pypdf>=4.0
 numpy>=1.26
 streamlit>=1.40
