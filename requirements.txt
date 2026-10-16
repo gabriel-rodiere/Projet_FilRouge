@@ -4,7 +4,7 @@ python-dotenv>=1.0
 mysql-connector-python>=9.0
 pypdf>=4.0
 numpy>=1.26
-streamlit>=1.40
+streamlit>=1.65.0
 
 # Tests
 pytest>=8.0
