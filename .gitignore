@@ -1,0 +1,54 @@
+# Secrets : le fichier .env n'est JAMAIS commité (seul .env.example l'est)
+.env
+.env.*
+!.env.example
+
+# Environnements virtuels
+.venv*/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Tests et couverture
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+rapport*.xml
+
+# Logs de l'application
+logs/
+*.log
+*.jsonl
+
+# Cache de l'index RAG (recalculé localement)
+cache/
+*.npy
+*.pkl
+
+# Streamlit (secrets locaux)
+.streamlit/secrets.toml
+
+# Documents de travail personnels (non livrés)
+PLAN_ACTION.md
+NOTES*.md
+
+# Fichiers locaux de Claude Code
+.claude/
+CLAUDE.local.md
+
+# IDE et système
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Fichiers temporaires Office (cahier des charges ouvert dans Word)
+~$*
