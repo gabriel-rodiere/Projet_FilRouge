@@ -1,5 +1,5 @@
 semantic-kernel>=1.40
-openai>=1.60
+openai>=3.29.0
 python-dotenv>=1.0
 mysql-connector-python>=9.0
 pypdf>=4.0
