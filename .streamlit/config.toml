@@ -1,0 +1,9 @@
+# Configuration Streamlit du projet (commitée ; les secrets éventuels vont dans secrets.toml, ignoré par git)
+[browser]
+# Pas d'envoi de statistiques d'usage à Streamlit
+gatherUsageStats = false
+
+[client]
+# Pas de menu développeur ni de trace d'erreur affichée aux utilisateurs
+toolbarMode = "viewer"
+showErrorDetails = "none"
