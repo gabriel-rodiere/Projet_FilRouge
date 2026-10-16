@@ -1,4 +1,4 @@
-semantic-kernel>=1.40
+semantic-kernel>=1.45.0
 openai>=1.60
 python-dotenv>=1.0
 mysql-connector-python>=9.0
