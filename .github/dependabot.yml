@@ -1,0 +1,15 @@
+# Dependabot : propose chaque semaine des pull requests de mise à jour
+# des dépendances Python (requirements.txt) et des actions GitHub du pipeline.
+# Les alertes de sécurité (Dependabot alerts) s'activent dans Settings > Code security.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly

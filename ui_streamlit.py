@@ -15,8 +15,7 @@ import streamlit as st
 
 from app.agent import nouvelle_conversation, preparer_agent, repondre
 from app.journal import journaliser
-
-LONGUEUR_MAX_QUESTION = 1000
+from app.securite import LONGUEUR_MAX
 
 QUESTIONS_EXEMPLES = [
     "Quels produits sont en rupture de stock ?",
@@ -107,7 +106,7 @@ for message in st.session_state.messages:
         if message["role"] == "assistant":
             afficher_outils(message["outils"], message["tokens"])
 
-question = st.chat_input("Votre question…", max_chars=LONGUEUR_MAX_QUESTION)
+question = st.chat_input("Votre question…", max_chars=LONGUEUR_MAX)
 question = question or st.session_state.pop("question_exemple", None)
 
 if question:

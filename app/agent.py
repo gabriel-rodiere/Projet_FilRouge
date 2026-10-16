@@ -25,6 +25,7 @@ from app.journal import journaliser, tronquer
 from app.plugins.catalogue import CataloguePlugin
 from app.plugins.fiches import FichesPlugin
 from app.rag import IndexRag
+from app.securite import verifier_entree
 
 INSTRUCTIONS = """Tu es l'assistant du service Achats. Tu réponds en français aux questions sur
 le catalogue produits et sur les fournisseurs, à partir de deux sources :
@@ -121,6 +122,11 @@ def _tokens(messages):
 
 async def repondre(agent, thread, question):
     """Pose une question à l'agent. Renvoie (réponse, outils appelés, tokens)."""
+    ok, raison = verifier_entree(question)
+    if not ok:  # refusé AVANT tout appel au LLM : 0 token consommé
+        journaliser("question_refusee", logging.WARNING, raison=raison, question=tronquer(question))
+        return f"Je ne peux pas traiter cette demande : {raison}.", [], {"entree": 0, "sortie": 0}
+
     outils = []
     _outils_appeles.set(outils)
     nb_messages_avant = len(thread)

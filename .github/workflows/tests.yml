@@ -1,0 +1,135 @@
+# Pipeline de tests : à chaque push sur main (et sur les pull requests vers main).
+#   1. base MySQL 8 de test (service conteneur) remplie par les scripts sql/
+#   2. installation des dépendances (cache pip) + audit de sécurité (pip-audit)
+#   3. tests unitaires + couverture ; un test en échec fait échouer le pipeline
+#   4. rapport de tests et de couverture publiés (résumé du job + artefacts)
+# Aucun appel à Azure OpenAI : les tests utilisent de faux services (aucun coût).
+#
+# Secrets à créer dans GitHub (Settings > Secrets and variables > Actions) :
+#   MYSQL_ROOT_PASSWORD   mot de passe root de la base de test (au choix)
+#   MYSQL_AGENT_PASSWORD  mot de passe donné à l'utilisateur agent_ia dans le pipeline (au choix)
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Tests unitaires (Python 3.12, MySQL 8)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      CI: "true"
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: "3306"
+      MYSQL_USER: agent_ia
+      MYSQL_PASSWORD: ${{ secrets.MYSQL_AGENT_PASSWORD }}
+      MYSQL_DATABASE: catalogue
+
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v6
+
+      - name: Installer Python 3.12 (avec cache pip)
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Installer les dépendances
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Préparer la base de test (scripts sql/00, 01, 02)
+        env:
+          MYSQL_PWD: ${{ secrets.MYSQL_ROOT_PASSWORD }}  # lu par le client mysql : pas de mot de passe en ligne de commande
+        run: |
+          mysql -h 127.0.0.1 -u root < sql/00_mysql_base_et_utilisateur.sql
+          mysql -h 127.0.0.1 -u root catalogue < sql/01_schema.sql
+          mysql -h 127.0.0.1 -u root catalogue < sql/02_donnees.sql
+          # Le mot de passe de démonstration du script 00 est remplacé par celui des secrets GitHub
+          mysql -h 127.0.0.1 -u root -e "ALTER USER 'agent_ia'@'%' IDENTIFIED BY '${MYSQL_PASSWORD}';
+                                          ALTER USER 'agent_ia'@'localhost' IDENTIFIED BY '${MYSQL_PASSWORD}';"
+          echo "Produits chargés : $(mysql -h 127.0.0.1 -u root -N -e 'SELECT COUNT(*) FROM catalogue.produits')"
+
+      - name: Auditer les dépendances (pip-audit)
+        # Vulnérabilités ignorées, avec justification (voir CHECKLIST_PROD.md) :
+        #   werkzeug < 3.1.2 est imposé par semantic-kernel 1.45 (openapi-core < 0.20) ; il n'est utilisé que
+        #   par l'intégration Flask d'openapi-core, jamais appelée par l'application. À retirer dès que
+        #   semantic-kernel lève la contrainte (Dependabot proposera la mise à jour).
+        run: >-
+          pipx run pip-audit==2.10.1 -r requirements.txt --progress-spinner off
+          --ignore-vuln PYSEC-2026-2044
+          --ignore-vuln PYSEC-2026-2046
+          --ignore-vuln PYSEC-2026-2320
+          --ignore-vuln PYSEC-2026-4312
+
+      - name: Lancer les tests unitaires
+        run: >-
+          pytest
+          --junitxml=rapport-tests.xml
+          --cov=app --cov-report=term --cov-report=xml --cov-report=html
+          --cov-fail-under=75
+
+      - name: Publier le résumé des tests et de la couverture
+        if: always()
+        run: |
+          python - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          if not Path("rapport-tests.xml").exists():
+              print("## ❌ Tests non exécutés"); raise SystemExit
+          racine = ET.parse("rapport-tests.xml").getroot()
+          suite = racine if racine.tag == "testsuite" else racine.find("testsuite")
+          total, echecs = int(suite.get("tests")), int(suite.get("failures")) + int(suite.get("errors"))
+          ignores = int(suite.get("skipped"))
+          print(f"## {'✅' if echecs == 0 else '❌'} Tests unitaires : {total - echecs - ignores}/{total} réussis")
+          print(f"\nÉchecs : {echecs} · Ignorés : {ignores} · Durée : {float(suite.get('time')):.1f} s\n")
+          print("| Résultat | Test |\n|---|---|")
+          for cas in suite.iter("testcase"):
+              etat = "❌" if cas.find("failure") is not None or cas.find("error") is not None else (
+                  "⏭️" if cas.find("skipped") is not None else "✅")
+              print(f"| {etat} | `{cas.get('classname')}::{cas.get('name')}` |")
+          EOF
+          if [ -f .coverage ]; then
+            echo "## Couverture de code" >> "$GITHUB_STEP_SUMMARY"
+            coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Publier les rapports (artefacts)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: rapports-tests
+          path: |
+            rapport-tests.xml
+            coverage.xml
+            htmlcov/
+          if-no-files-found: warn
