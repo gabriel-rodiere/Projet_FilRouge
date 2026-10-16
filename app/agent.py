@@ -21,7 +21,7 @@ from semantic_kernel.filters import FilterTypes
 from semantic_kernel.functions import KernelArguments
 
 from app.config import creer_kernel
-from app.journal import journaliser, tronquer
+from app.journal import estimer_cout, journaliser, tronquer
 from app.plugins.catalogue import CataloguePlugin
 from app.plugins.fiches import FichesPlugin
 from app.rag import IndexRag
@@ -121,11 +121,12 @@ def _tokens(messages):
 
 
 async def repondre(agent, thread, question):
-    """Pose une question à l'agent. Renvoie (réponse, outils appelés, tokens)."""
+    """Pose une question à l'agent. Renvoie (réponse, outils appelés, tokens et coût estimé)."""
+    aucun_token = {"entree": 0, "sortie": 0, "cout_euros": 0.0}
     ok, raison = verifier_entree(question)
     if not ok:  # refusé AVANT tout appel au LLM : 0 token consommé
         journaliser("question_refusee", logging.WARNING, raison=raison, question=tronquer(question))
-        return f"Je ne peux pas traiter cette demande : {raison}.", [], {"entree": 0, "sortie": 0}
+        return f"Je ne peux pas traiter cette demande : {raison}.", [], aucun_token
 
     outils = []
     _outils_appeles.set(outils)
@@ -136,18 +137,19 @@ async def repondre(agent, thread, question):
     except Exception as erreur:  # Azure indisponible, quota, filtre de contenu... : rien de technique à l'écran
         journaliser("erreur_agent", logging.ERROR, question=tronquer(question),
                     erreur=f"{type(erreur).__name__}: {str(erreur)[:200]}")
-        return MESSAGE_ERREUR, outils, {"entree": 0, "sortie": 0}
+        return MESSAGE_ERREUR, outils, aucun_token
 
     nouveaux = [m async for m in thread.get_messages()][nb_messages_avant:]
     entree, sortie = _tokens(nouveaux)
+    cout = estimer_cout(entree, sortie)
     await thread.reduce()  # tronque l'historique sans séparer un appel d'outil de son résultat
 
     texte = str(reponse.message.content)
     journaliser("question", question=tronquer(question), reponse=tronquer(texte),
                 outils=[o["outil"] for o in outils],
                 duree_ms=round((time.perf_counter() - debut) * 1000),
-                tokens_entree=entree, tokens_sortie=sortie)
-    return texte, outils, {"entree": entree, "sortie": sortie}
+                tokens_entree=entree, tokens_sortie=sortie, cout_euros=cout)
+    return texte, outils, {"entree": entree, "sortie": sortie, "cout_euros": cout}
 
 
 async def main():
@@ -168,7 +170,7 @@ async def main():
         texte, outils, tokens = await repondre(agent, thread, question)
         for appel in outils:
             print(f"   [outil] {appel['outil']}({appel['arguments']}) - {appel['duree_ms']} ms")
-        print(f"\nAssistant > {texte}\n   ({tokens['entree']} + {tokens['sortie']} tokens)\n")
+        print(f"\nAssistant > {texte}\n   ({tokens['entree']} + {tokens['sortie']} tokens, ≈ {tokens['cout_euros']:.5f} €)\n")
 
 
 if __name__ == "__main__":

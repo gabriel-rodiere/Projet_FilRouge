@@ -69,7 +69,8 @@ def afficher_outils(outils, tokens):
         if not outils:
             st.markdown("_Aucun outil : réponse directe du modèle._")
         if tokens:
-            st.caption(f"Tokens : {tokens['entree']} en entrée, {tokens['sortie']} en sortie")
+            st.caption(f"Tokens : {tokens['entree']} en entrée, {tokens['sortie']} en sortie"
+                       f" · coût estimé ≈ {tokens.get('cout_euros', 0):.5f} €")
 
 
 # ---------- Barre latérale ----------
